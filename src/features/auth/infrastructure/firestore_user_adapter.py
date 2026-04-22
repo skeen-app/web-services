@@ -1,13 +1,17 @@
-from firebase_admin import firestore
+from google.cloud import firestore
 from src.features.auth.domain.entities import UserEntity
 from src.core.logger import get_logger
+import os
 
 logger = get_logger(__name__)
 
 class FirestoreUserAdapter:
     def __init__(self):
-        self.db = firestore.client()
+        # Database ID from environment, defaults to '(default)'
+        db_id = os.getenv("FIRESTORE_DATABASE_ID", "(default)")
+        self.db = firestore.Client(database=db_id)
         self.collection_name = "users"
+        logger.info(f"FirestoreUserAdapter: Connected to database instance: {db_id}")
 
     async def save_user(self, user: UserEntity) -> None:
         try:
