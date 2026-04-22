@@ -28,3 +28,16 @@ The skeen backend acts as a robust, secure, and highly scalable orchestrator for
 4. **OTA Update Orchestration (System)**
    - Model version control.
    - Serving manifests for AR assets and TFLite updates.
+
+## Folders Structure
+├── src/
+│   ├── core/                   # Shared (Security, Config, Middlewares)
+│   ├── features/               # Bounded Contexts
+│   │   ├── auth/               # Identity Validation
+│   │   ├── patient/            # Patient Data Management
+│   │   ├── detection/          # Analysis Coordination
+│   │   └── system/             # OTA & Global Orchestration
+│   │       ├── domain/         # Entities, Repository Interfaces
+│   │       ├── application/    # Use Cases (Services)
+│   │       └── infrastructure/ # Repo Impls (Firestore, GCP Adapters)
+│   └── main.py                 # Punto de entrada FastAPI
