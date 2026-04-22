@@ -2,6 +2,9 @@ import time
 from fastapi import HTTPException
 from src.features.auth.domain.entities import IAuthRepository, IUserRepository, UserEntity
 from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken
+from src.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 class AuthService:
     def __init__(self, auth_repo: IAuthRepository, user_repo: IUserRepository):
@@ -9,9 +12,11 @@ class AuthService:
         self.user_repo = user_repo
 
     async def register(self, request: RegistrationRequest) -> RegisteredUser:
-        # Check if user with email already exists in Firestore/Auth can be handled gracefully
+        logger.info(f"AuthService: Initiating registration sequence for {request.email}")
+        
         # Create Firebase Identity
         uid = await self.auth_repo.create_user(request.email, request.password)
+        logger.info(f"AuthService: Firebase Identity created with UID: {uid}")
         
         # Build Domain Entity
         new_user = UserEntity(
@@ -25,6 +30,7 @@ class AuthService:
 
         # Save to Database
         await self.user_repo.save_user(new_user)
+        logger.info(f"AuthService: User profile saved to database for UID: {uid}")
 
         # Convert to Output DTO
         return RegisteredUser(
@@ -37,12 +43,15 @@ class AuthService:
         )
 
     async def login(self, request: LoginRequest) -> tuple[AuthToken, RegisteredUser]:
+        logger.info(f"AuthService: Initiating login sequence for {request.email}")
+        
         # Perform Identity verification
         uid, id_token = await self.auth_repo.verify_password(request.email, request.password)
-
+        
         # Fetch profile
         user = await self.user_repo.get_user(uid)
         if not user:
+            logger.warning(f"AuthService: User logged in via Firebase Identity but profile missing in Firestore (UID: {uid})")
             raise HTTPException(status_code=404, detail="User profile not found")
 
         # Map to Output DTOs
@@ -58,5 +67,6 @@ class AuthService:
             value=id_token,
             issuedAt=int(time.time())
         )
-
+        
+        logger.info(f"AuthService: Login sequence successful for UID: {uid}")
         return auth_token, registered_user

@@ -5,6 +5,9 @@ from src.core.middlewares.jwt import jwt_middleware
 import firebase_admin
 from dotenv import load_dotenv
 import os
+from src.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Load Environment Variables from .env
 load_dotenv()
@@ -14,8 +17,9 @@ try:
     if not firebase_admin._apps:
         # If GOOGLE_APPLICATION_CREDENTIALS is set, firebase-admin uses it automatically
         firebase_admin.initialize_app()
+        logger.info("Firebase Admin SDK implicitly initialized via GOOGLE_APPLICATION_CREDENTIALS.")
 except Exception as e:
-    print(f"Error initializing Firebase: {e}")
+    logger.error(f"Error initializing Firebase: {str(e)}", exc_info=True)
 
 app = FastAPI(
     title="Skeen Backend",
