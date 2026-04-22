@@ -15,3 +15,8 @@
 - **SQLi/NoSQLi:** Use Pydantic and Firestore ODM to prevent injection.
 - **DDoS/Rate Limit:** Implement `slowapi` or similar to limit requests per IP/User.
 - **Data Sanitization:** Strict input validation on every endpoint.
+
+## 4. Error Handling & API Design
+- **Clean Architected Responses:** Every API router must contain a robust `try-catch` block mapping errors to standard HTTP Status Codes.
+- **No Stack Traces:** Internal server errors (500) must obscure detailed engine stack lines to prevent data leakage.
+- **Client Errors:** Correct usage of 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), and 404 (Not Found).

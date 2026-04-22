@@ -2,6 +2,20 @@ from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.core.middlewares.jwt import jwt_middleware
+import firebase_admin
+from dotenv import load_dotenv
+import os
+
+# Load Environment Variables from .env
+load_dotenv()
+
+# Initialize Firebase App
+try:
+    if not firebase_admin._apps:
+        # If GOOGLE_APPLICATION_CREDENTIALS is set, firebase-admin uses it automatically
+        firebase_admin.initialize_app()
+except Exception as e:
+    print(f"Error initializing Firebase: {e}")
 
 app = FastAPI(
     title="Skeen Backend",
@@ -25,8 +39,9 @@ app.middleware("http")(jwt_middleware)
 def health_check():
     return {"status": "healthy", "service": "skeen-backend"}
 
-# Register routers here (to be added)
-# e.g., app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+# Register routers
+from src.features.auth.api.router import router as auth_router
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 
 if __name__ == "__main__":
     import uvicorn
