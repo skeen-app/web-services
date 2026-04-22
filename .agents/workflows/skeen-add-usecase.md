@@ -13,4 +13,5 @@ Provide the `[context]` (e.g., patient, auth, detection, system) and `[name]` (e
 1. **Domain:** Create the Domain Entity and Repository Interface in `src/features/[context]/domain/`. No GCP dependencies.
 2. **Application:** Create the Application Service (Use Case) in `src/features/[context]/application/`. Apply dependency injection.
 3. **Infrastructure:** Create the Infrastructure Implementation in `src/features/[context]/infrastructure/` (e.g., Firestore implementation).
-4. **API:** Ensure it connects to the FastAPI router.
+4. **API:** Ensure it connects to the FastAPI router. Use robust `try...except` error handling per the Security Specs, mapping errors to clean HTTP error codes and avoiding trace leaks.
+5. **Logging:** Implement mandatory logging using `src.core.logger` in all layers (API, Application, Infrastructure) for observability.
