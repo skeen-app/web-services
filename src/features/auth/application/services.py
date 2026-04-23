@@ -11,13 +11,13 @@ class AuthService:
         self.auth_repo = auth_repo
         self.user_repo = user_repo
 
-    async def register(self, request: RegistrationRequest) -> RegisteredUser:
+    async def register(self, request: RegistrationRequest) -> tuple[AuthToken, RegisteredUser]:
         logger.info(f"AuthService: Initiating registration sequence for {request.email}")
-        
+
         # Create Firebase Identity
         uid = await self.auth_repo.create_user(request.email, request.password)
         logger.info(f"AuthService: Firebase Identity created with UID: {uid}")
-        
+
         # Build Domain Entity
         new_user = UserEntity(
             id=uid,
@@ -32,8 +32,10 @@ class AuthService:
         await self.user_repo.save_user(new_user)
         logger.info(f"AuthService: User profile saved to database for UID: {uid}")
 
-        # Convert to Output DTO
-        return RegisteredUser(
+        # Exchange credentials for an idToken so the client is signed in after register
+        _, id_token = await self.auth_repo.verify_password(request.email, request.password)
+
+        registered_user = RegisteredUser(
             id=uid,
             name=new_user.name,
             lastName=new_user.lastName,
@@ -41,6 +43,11 @@ class AuthService:
             email=new_user.email,
             phone=new_user.phone
         )
+        auth_token = AuthToken(
+            value=id_token,
+            issuedAt=int(time.time())
+        )
+        return auth_token, registered_user
 
     async def login(self, request: LoginRequest) -> tuple[AuthToken, RegisteredUser]:
         logger.info(f"AuthService: Initiating login sequence for {request.email}")

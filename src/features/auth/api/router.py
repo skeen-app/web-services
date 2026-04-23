@@ -14,13 +14,16 @@ def get_auth_service(request: Request) -> AuthService:
     user_repo = FirestoreUserAdapter(client=request.app.state.firestore_client)
     return AuthService(auth_repo, user_repo)
 
-@router.post("/register", response_model=RegisteredUser)
+@router.post("/register")
 async def register(request: RegistrationRequest, service: AuthService = Depends(get_auth_service)):
     try:
         logger.info(f"Incoming registration request for email: {request.email}")
-        result = await service.register(request)
-        logger.info(f"Successfully registered user {result.id}")
-        return result
+        auth_token, user = await service.register(request)
+        logger.info(f"Successfully registered user {user.id}")
+        return {
+            "token": auth_token,
+            "user": user
+        }
     except HTTPException as handled_exc:
         logger.warning(f"Registration aborted due to HTTPException: {handled_exc.detail}")
         raise handled_exc
