@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from src.features.auth.application.services import AuthService
 from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken
 from src.features.auth.infrastructure.firebase_auth_adapter import FirebaseAuthAdapter
@@ -9,10 +9,9 @@ from src.core.logger import get_logger
 logger = get_logger(__name__)
 router = APIRouter()
 
-def get_auth_service() -> AuthService:
-    # Basic Dependency Injection
+def get_auth_service(request: Request) -> AuthService:
     auth_repo = FirebaseAuthAdapter()
-    user_repo = FirestoreUserAdapter()
+    user_repo = FirestoreUserAdapter(client=request.app.state.firestore_client)
     return AuthService(auth_repo, user_repo)
 
 @router.post("/register", response_model=RegisteredUser)
