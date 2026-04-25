@@ -30,3 +30,12 @@ class FirestoreUserAdapter:
         except Exception as e:
             logger.error(f"FirestoreUserAdapter: Failed to get user {user_id}. Error: {e}", exc_info=True)
             raise
+
+    async def update_avatar_url(self, user_id: str, photo_url: str) -> None:
+        try:
+            doc_ref = self.db.collection(self.collection_name).document(user_id)
+            doc_ref.update({"avatarUrl": photo_url})
+            logger.info(f"FirestoreUserAdapter: Updated avatarUrl for user {user_id}")
+        except Exception as e:
+            logger.error(f"FirestoreUserAdapter: Failed to update avatarUrl for user {user_id}. Error: {e}", exc_info=True)
+            raise

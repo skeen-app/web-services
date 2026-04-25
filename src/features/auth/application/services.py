@@ -68,7 +68,8 @@ class AuthService:
             lastName=user.lastName,
             dni=user.dni,
             email=user.email,
-            phone=user.phone
+            phone=user.phone,
+            avatarUrl=user.avatarUrl,
         )
         auth_token = AuthToken(
             value=id_token,

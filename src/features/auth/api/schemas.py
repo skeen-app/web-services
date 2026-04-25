@@ -38,6 +38,7 @@ class RegisteredUser(BaseModel):
     dni: str
     email: EmailStr
     phone: str
+    avatarUrl: str | None = None
 
 class AuthToken(BaseModel):
     value: str
@@ -48,3 +49,7 @@ class LogoutResponse(BaseModel):
     userId: str
     loggedOutAt: int
     message: str = "Session revoked successfully"
+
+class ProfilePhotoResponse(BaseModel):
+    url: str
+    uploadedAt: int
