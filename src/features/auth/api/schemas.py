@@ -42,3 +42,9 @@ class RegisteredUser(BaseModel):
 class AuthToken(BaseModel):
     value: str
     issuedAt: int
+
+class LogoutResponse(BaseModel):
+    loggedOut: bool
+    userId: str
+    loggedOutAt: int
+    message: str = "Session revoked successfully"

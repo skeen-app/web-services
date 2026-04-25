@@ -49,3 +49,27 @@ class FirebaseAuthAdapter:
         except httpx.RequestError as exc:
             logger.error(f"FirebaseAuthAdapter: HTTP Request failed connecting to Google API: {exc}")
             raise HTTPException(status_code=500, detail="External identity service is unavailable.")
+
+    async def verify_id_token(self, id_token: str) -> str:
+        try:
+            decoded = auth.verify_id_token(id_token, check_revoked=True)
+            return decoded["uid"]
+        except auth.RevokedIdTokenError:
+            logger.warning("FirebaseAuthAdapter: ID token has been revoked.")
+            raise HTTPException(status_code=401, detail="Session already revoked.")
+        except auth.ExpiredIdTokenError:
+            logger.warning("FirebaseAuthAdapter: ID token expired.")
+            raise HTTPException(status_code=401, detail="Session expired.")
+        except auth.InvalidIdTokenError as e:
+            logger.warning(f"FirebaseAuthAdapter: Invalid ID token. Reason: {e}")
+            raise HTTPException(status_code=401, detail="Invalid authentication token.")
+        except Exception as e:
+            logger.error(f"FirebaseAuthAdapter: Unexpected error verifying ID token: {e}")
+            raise HTTPException(status_code=401, detail="Could not verify authentication token.")
+
+    async def revoke_refresh_tokens(self, uid: str) -> None:
+        try:
+            auth.revoke_refresh_tokens(uid)
+        except Exception as e:
+            logger.error(f"FirebaseAuthAdapter: Failed to revoke refresh tokens for UID {uid}. Reason: {e}")
+            raise HTTPException(status_code=500, detail="Failed to revoke session.")
