@@ -1,7 +1,9 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.core.middlewares.jwt import jwt_middleware
+from google.cloud import firestore
 import firebase_admin
 from dotenv import load_dotenv
 import os
@@ -21,10 +23,22 @@ try:
 except Exception as e:
     logger.error(f"Error initializing Firebase: {str(e)}", exc_info=True)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db_id = os.getenv("FIRESTORE_DATABASE_ID", "(default)")
+    app.state.firestore_client = firestore.Client(database=db_id)
+    logger.info(f"Firestore client initialized for database: {db_id}")
+    yield
+    app.state.firestore_client.close()
+    logger.info("Firestore client closed.")
+
+
 app = FastAPI(
     title="Skeen Backend",
     description="Skeen backend orchestrator for dermatological triage data in Peru.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS config
