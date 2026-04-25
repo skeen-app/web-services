@@ -1,7 +1,7 @@
 import time
 from fastapi import HTTPException
 from src.features.auth.domain.entities import IAuthRepository, IUserRepository, UserEntity
-from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken
+from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken, LogoutResponse
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -77,3 +77,19 @@ class AuthService:
         
         logger.info(f"AuthService: Login sequence successful for UID: {uid}")
         return auth_token, registered_user
+
+    async def logout(self, id_token: str) -> LogoutResponse:
+        logger.info("AuthService: Initiating logout sequence")
+
+        # Verify token authenticity and extract UID
+        uid = await self.auth_repo.verify_id_token(id_token)
+
+        # Revoke all refresh tokens for this user in Firebase
+        await self.auth_repo.revoke_refresh_tokens(uid)
+        logger.info(f"AuthService: Refresh tokens revoked for UID: {uid}")
+
+        return LogoutResponse(
+            loggedOut=True,
+            userId=uid,
+            loggedOutAt=int(time.time())
+        )

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from src.features.auth.application.services import AuthService
-from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken
+from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken, LogoutResponse
 from src.features.auth.infrastructure.firebase_auth_adapter import FirebaseAuthAdapter
 from src.features.auth.infrastructure.firestore_user_adapter import FirestoreUserAdapter
 from email_validator import EmailNotValidError
@@ -50,3 +50,37 @@ async def login(request: LoginRequest, service: AuthService = Depends(get_auth_s
     except Exception as e:
         logger.error(f"Internal Error during login: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An internal sequence failed during login.")
+
+@router.post("/logout", response_model=LogoutResponse)
+async def logout(
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        logger.warning("Logout aborted: missing or malformed Authorization header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token in Authorization header.",
+        )
+
+    id_token = authorization.split(" ", 1)[1].strip()
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty Bearer token.",
+        )
+
+    try:
+        logger.info("Incoming logout request")
+        result = await service.logout(id_token)
+        logger.info(f"Successfully logged out user {result.userId}")
+        return result
+    except HTTPException as handled_exc:
+        logger.warning(f"Logout aborted due to HTTPException: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal Error during logout: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during logout.",
+        )
