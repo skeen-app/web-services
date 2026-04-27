@@ -73,3 +73,16 @@ class FirebaseAuthAdapter:
         except Exception as e:
             logger.error(f"FirebaseAuthAdapter: Failed to revoke refresh tokens for UID {uid}. Reason: {e}")
             raise HTTPException(status_code=500, detail="Failed to revoke session.")
+
+    async def delete_user(self, uid: str) -> None:
+        # Hard-removes the identity from Firebase Auth so the credentials can
+        # no longer be used. The Firestore profile is kept (soft-deleted via
+        # `isActive=False`) for audit/traceability.
+        try:
+            auth.delete_user(uid)
+        except auth.UserNotFoundError:
+            # Already gone — treat as success so retries are idempotent.
+            logger.info(f"FirebaseAuthAdapter: delete_user no-op (UID {uid} not found).")
+        except Exception as e:
+            logger.error(f"FirebaseAuthAdapter: Failed to delete user {uid}. Reason: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete identity.")

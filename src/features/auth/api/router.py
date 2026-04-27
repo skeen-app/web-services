@@ -1,9 +1,15 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+import time
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile, status
 from src.features.auth.application.services import AuthService
-from src.features.auth.api.schemas import RegistrationRequest, LoginRequest, RegisteredUser, AuthToken, LogoutResponse
+from src.features.auth.application.profile_photo_service import ProfilePhotoService
+from src.features.auth.api.schemas import (
+    RegistrationRequest, LoginRequest, RegisteredUser,
+    AuthToken, LogoutResponse, ProfilePhotoResponse,
+    UpdateProfileRequest, DeleteAccountResponse,
+)
 from src.features.auth.infrastructure.firebase_auth_adapter import FirebaseAuthAdapter
 from src.features.auth.infrastructure.firestore_user_adapter import FirestoreUserAdapter
-from email_validator import EmailNotValidError
+from src.features.auth.infrastructure.cloud_storage_adapter import CloudStorageAdapter
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,6 +19,11 @@ def get_auth_service(request: Request) -> AuthService:
     auth_repo = FirebaseAuthAdapter()
     user_repo = FirestoreUserAdapter(client=request.app.state.firestore_client)
     return AuthService(auth_repo, user_repo)
+
+def get_profile_photo_service(request: Request) -> ProfilePhotoService:
+    storage_repo = CloudStorageAdapter(client=request.app.state.storage_client)
+    user_repo = FirestoreUserAdapter(client=request.app.state.firestore_client)
+    return ProfilePhotoService(storage_repo, user_repo)
 
 @router.post("/register")
 async def register(request: RegistrationRequest, service: AuthService = Depends(get_auth_service)):
@@ -83,4 +94,113 @@ async def logout(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal sequence failed during logout.",
+        )
+
+def _bearer_token_or_401(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token in Authorization header.",
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty Bearer token.",
+        )
+    return token
+
+
+@router.patch("/me", response_model=RegisteredUser)
+async def update_me(
+    body: UpdateProfileRequest,
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    id_token = _bearer_token_or_401(authorization)
+    try:
+        logger.info("Incoming profile update request")
+        return await service.update_profile(id_token, body)
+    except HTTPException as handled_exc:
+        logger.warning(f"Profile update aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal Error during profile update: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during profile update.",
+        )
+
+
+@router.delete("/me", response_model=DeleteAccountResponse)
+async def delete_me(
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    id_token = _bearer_token_or_401(authorization)
+    try:
+        logger.info("Incoming account deletion request")
+        result = await service.delete_account(id_token)
+        logger.info(f"Account deletion successful for user {result.userId}")
+        return result
+    except HTTPException as handled_exc:
+        logger.warning(f"Account deletion aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal Error during account deletion: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during account deletion.",
+        )
+
+
+@router.post("/profile-photo", response_model=ProfilePhotoResponse)
+async def upload_profile_photo(
+    file: UploadFile,
+    request: Request,
+    authorization: str = Header(..., description="Bearer <Firebase ID Token>"),
+    service: ProfilePhotoService = Depends(get_profile_photo_service),
+):
+    # --- Authenticate via Firebase JWT ---
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token in Authorization header.",
+        )
+    id_token = authorization.split(" ", 1)[1].strip()
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty Bearer token.",
+        )
+
+    try:
+        auth_adapter = FirebaseAuthAdapter()
+        uid = await auth_adapter.verify_id_token(id_token)
+        logger.info(f"Profile photo upload requested by user {uid}")
+
+        # Read file bytes
+        file_content = await file.read()
+        content_type = file.content_type or "application/octet-stream"
+        filename = file.filename or "unknown"
+
+        # Delegate to application service
+        public_url = await service.upload_profile_photo(
+            user_id=uid,
+            file_content=file_content,
+            filename=filename,
+            content_type=content_type,
+        )
+
+        logger.info(f"Profile photo uploaded successfully for user {uid}")
+        return ProfilePhotoResponse(url=public_url, uploadedAt=int(time.time()))
+
+    except HTTPException as handled_exc:
+        logger.warning(f"Profile photo upload aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal error during profile photo upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during profile photo upload.",
         )

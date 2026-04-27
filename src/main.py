@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from src.core.middlewares.jwt import jwt_middleware
-from google.cloud import firestore
+from google.cloud import firestore, storage
 import firebase_admin
 from dotenv import load_dotenv
 import os
@@ -28,7 +28,9 @@ except Exception as e:
 async def lifespan(app: FastAPI):
     db_id = os.getenv("FIRESTORE_DATABASE_ID", "(default)")
     app.state.firestore_client = firestore.Client(database=db_id)
+    app.state.storage_client = storage.Client()
     logger.info(f"Firestore client initialized for database: {db_id}")
+    logger.info("Cloud Storage client initialized.")
     yield
     app.state.firestore_client.close()
     logger.info("Firestore client closed.")
