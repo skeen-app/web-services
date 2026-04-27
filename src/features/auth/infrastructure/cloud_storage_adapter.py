@@ -31,6 +31,7 @@ class CloudStorageAdapter:
         try:
             bucket = self.client.bucket(self.bucket_name)
             blob = bucket.blob(blob_path)
+            blob.cache_control = "no-cache, max-age=0"
             blob.upload_from_string(file_content, content_type=content_type)
 
             public_url = f"https://storage.googleapis.com/{self.bucket_name}/{blob_path}"
