@@ -5,6 +5,7 @@ from src.features.auth.application.profile_photo_service import ProfilePhotoServ
 from src.features.auth.api.schemas import (
     RegistrationRequest, LoginRequest, RegisteredUser,
     AuthToken, LogoutResponse, ProfilePhotoResponse,
+    UpdateProfileRequest, DeleteAccountResponse,
 )
 from src.features.auth.infrastructure.firebase_auth_adapter import FirebaseAuthAdapter
 from src.features.auth.infrastructure.firestore_user_adapter import FirestoreUserAdapter
@@ -94,6 +95,64 @@ async def logout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal sequence failed during logout.",
         )
+
+def _bearer_token_or_401(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token in Authorization header.",
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty Bearer token.",
+        )
+    return token
+
+
+@router.patch("/me", response_model=RegisteredUser)
+async def update_me(
+    body: UpdateProfileRequest,
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    id_token = _bearer_token_or_401(authorization)
+    try:
+        logger.info("Incoming profile update request")
+        return await service.update_profile(id_token, body)
+    except HTTPException as handled_exc:
+        logger.warning(f"Profile update aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal Error during profile update: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during profile update.",
+        )
+
+
+@router.delete("/me", response_model=DeleteAccountResponse)
+async def delete_me(
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    id_token = _bearer_token_or_401(authorization)
+    try:
+        logger.info("Incoming account deletion request")
+        result = await service.delete_account(id_token)
+        logger.info(f"Account deletion successful for user {result.userId}")
+        return result
+    except HTTPException as handled_exc:
+        logger.warning(f"Account deletion aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal Error during account deletion: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during account deletion.",
+        )
+
 
 @router.post("/profile-photo", response_model=ProfilePhotoResponse)
 async def upload_profile_photo(
