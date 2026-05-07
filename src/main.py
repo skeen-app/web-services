@@ -80,8 +80,10 @@ def health_check():
 # Register routers
 from src.features.auth.api.router import router as auth_router
 from src.features.detection.api.router import router as detection_router
+from src.features.experts.api.router import router as experts_router
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(detection_router, prefix="/api/v1/scans", tags=["Scans"])
+app.include_router(experts_router, prefix="/api/v1/experts", tags=["Experts"])
 
 if __name__ == "__main__":
     import uvicorn
