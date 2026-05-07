@@ -72,6 +72,46 @@ class ProfilePhotoResponse(BaseModel):
     uploadedAt: int
 
 
+class PasswordResetRequest(BaseModel):
+    """Payload for ``POST /auth/password-reset/request`` (public).
+
+    A single field — we never accept the new password here; Firebase's
+    hosted action page is the only surface that takes the new credential,
+    one-time-token-bound.
+    """
+
+    email: EmailStr
+
+
+class PasswordResetResponse(BaseModel):
+    """Generic response intentionally indistinguishable between
+    "email registered → email sent" and "email unknown → no-op". The
+    email-enumeration mitigation lives at this contract.
+    """
+
+    sent: bool = True
+    message: str = (
+        "If that email is registered with skeen, password reset "
+        "instructions have been sent."
+    )
+
+
+class MePasswordResetResponse(BaseModel):
+    """Response for ``POST /auth/me/password-reset`` (authenticated).
+
+    The caller is already authenticated, so we can safely confirm the
+    target email — partially masked for shoulder-surfing protection
+    when the screen is shown in public.
+    """
+
+    sent: bool = True
+    email: str = Field(
+        ...,
+        description="Email address with the local-part partially masked, e.g. 'jo***@gmail.com'.",
+    )
+    message: str = "Password reset instructions have been sent to your inbox."
+
+
 # Re-export so router.py imports stay tidy.
 __all__ = [
     "RegistrationRequest",
@@ -82,4 +122,7 @@ __all__ = [
     "ProfilePhotoResponse",
     "UpdateProfileRequest",
     "DeleteAccountResponse",
+    "PasswordResetRequest",
+    "PasswordResetResponse",
+    "MePasswordResetResponse",
 ]

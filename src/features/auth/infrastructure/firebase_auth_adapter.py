@@ -86,3 +86,84 @@ class FirebaseAuthAdapter:
         except Exception as e:
             logger.error(f"FirebaseAuthAdapter: Failed to delete user {uid}. Reason: {e}")
             raise HTTPException(status_code=500, detail="Failed to delete identity.")
+
+    async def send_password_reset_email(self, email: str) -> bool:
+        """Asks Firebase Identity Toolkit to email a reset link.
+
+        Uses ``accounts:sendOobCode`` (mode ``PASSWORD_RESET``) so the email
+        delivery + template are handled by Firebase — no SMTP / SendGrid
+        dependency on our side. The template is configured in the Firebase
+        Console (Authentication → Templates → Password reset).
+
+        Returns:
+            ``True``  — Firebase accepted the request and queued the email.
+            ``False`` — email is unknown to Firebase. Caller MUST still
+                        respond 200 to the user (email-enumeration
+                        mitigation lives in the application service).
+        """
+        if not self.web_api_key:
+            logger.error(
+                "FirebaseAuthAdapter: FIREBASE_WEB_API_KEY is not configured."
+            )
+            raise HTTPException(
+                status_code=500, detail="Internal configuration error."
+            )
+
+        url = (
+            "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
+            f"?key={self.web_api_key}"
+        )
+        payload = {
+            "requestType": "PASSWORD_RESET",
+            "email": email,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, json=payload)
+        except httpx.RequestError as exc:
+            logger.error(
+                f"FirebaseAuthAdapter: HTTP error contacting Identity Toolkit: {exc}"
+            )
+            raise HTTPException(
+                status_code=503, detail="Identity service is unavailable."
+            )
+
+        if response.status_code == 200:
+            logger.info("FirebaseAuthAdapter: password reset email queued.")
+            return True
+
+        # Identity Toolkit returns 400 with an error body when the email
+        # isn't registered or when rate-limited per email. We treat the
+        # "EMAIL_NOT_FOUND" case as a no-op success at the API layer to
+        # prevent enumeration; everything else is logged and re-raised as
+        # 503 so the caller knows something genuinely failed upstream.
+        try:
+            data = response.json()
+            error_message = (data.get("error", {}) or {}).get("message", "")
+        except Exception:
+            error_message = ""
+
+        if response.status_code == 400 and error_message == "EMAIL_NOT_FOUND":
+            logger.info(
+                "FirebaseAuthAdapter: password reset requested for unknown email."
+            )
+            return False
+
+        if response.status_code == 400 and "TOO_MANY_ATTEMPTS_TRY_LATER" in error_message:
+            # Firebase enforces its own per-email rate limit — surface as
+            # 429 so the client can show a "try again later" message.
+            logger.warning(
+                "FirebaseAuthAdapter: Identity Toolkit rate-limited the reset request."
+            )
+            raise HTTPException(
+                status_code=429,
+                detail="Too many attempts. Please try again later.",
+            )
+
+        logger.error(
+            f"FirebaseAuthAdapter: sendOobCode returned {response.status_code}: "
+            f"{error_message or response.text}"
+        )
+        raise HTTPException(
+            status_code=503, detail="Could not send password reset email."
+        )

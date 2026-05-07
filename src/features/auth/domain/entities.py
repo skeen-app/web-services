@@ -36,6 +36,18 @@ class IAuthRepository(Protocol):
         """Permanently delete the Firebase Auth identity for the given UID."""
         pass
 
+    async def send_password_reset_email(self, email: str) -> bool:
+        """Triggers a password-reset email for the given address.
+
+        Implementations should be idempotent and never reveal whether the
+        email is registered (the email-enumeration mitigation lives at
+        this boundary so callers can trust a uniform response). Returns
+        ``True`` when the upstream provider accepted the request,
+        ``False`` when the email was unknown — callers convert both into
+        a single 200 response on the API.
+        """
+        pass
+
 class IStorageRepository(Protocol):
     async def upload_profile_photo(self, user_id: str, file_content: bytes, content_type: str) -> str:
         """Upload profile photo to cloud storage and return the public URL"""
