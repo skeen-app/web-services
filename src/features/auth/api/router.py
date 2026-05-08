@@ -9,6 +9,7 @@ from src.features.auth.api.schemas import (
     AuthToken, LogoutResponse, ProfilePhotoResponse,
     UpdateProfileRequest, DeleteAccountResponse,
     PasswordResetRequest, PasswordResetResponse, MePasswordResetResponse,
+    FederatedSignInRequest, FederatedSignInResponse, CompleteProfileRequest,
 )
 from src.features.auth.infrastructure.firebase_auth_adapter import FirebaseAuthAdapter
 from src.features.auth.infrastructure.firestore_user_adapter import FirestoreUserAdapter
@@ -165,6 +166,55 @@ async def delete_me(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal sequence failed during account deletion.",
+        )
+
+
+# ── Federated sign-in (Google / future providers) ────────────────────
+
+
+@router.post("/firebase", response_model=FederatedSignInResponse)
+async def federated_sign_in(
+    request: FederatedSignInRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    """Provider-agnostic federated sign-in. The mobile app signs in with
+    Google (today) or any other Firebase-supported provider, then
+    forwards the resulting Firebase ID token here so the backend can
+    upsert the Firestore profile and issue our session.
+    """
+    try:
+        logger.info("Incoming federated sign-in request")
+        return await service.sign_in_with_firebase_token(request.idToken)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Internal error during federated sign-in: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during sign-in.",
+        )
+
+
+@router.post("/me/complete-profile", response_model=RegisteredUser)
+async def complete_profile(
+    body: CompleteProfileRequest,
+    authorization: str | None = Header(default=None),
+    service: AuthService = Depends(get_auth_service),
+):
+    """Fills DNI + phone on a partial profile created by federated sign-in.
+    Idempotent guard: returns 409 if DNI is already set."""
+    id_token = _bearer_token_or_401(authorization)
+    try:
+        return await service.complete_profile(id_token, body)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Internal error during complete-profile: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during profile completion.",
         )
 
 

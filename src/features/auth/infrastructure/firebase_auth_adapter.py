@@ -3,6 +3,7 @@ import httpx
 from firebase_admin import auth
 from fastapi import HTTPException
 from src.core.logger import get_logger
+from src.features.auth.domain.entities import FirebaseIdentity
 
 logger = get_logger(__name__)
 
@@ -49,6 +50,32 @@ class FirebaseAuthAdapter:
         except httpx.RequestError as exc:
             logger.error(f"FirebaseAuthAdapter: HTTP Request failed connecting to Google API: {exc}")
             raise HTTPException(status_code=500, detail="External identity service is unavailable.")
+
+    async def resolve_identity(self, id_token: str) -> FirebaseIdentity:
+        """Same revocation / expiry guarantees as :meth:`verify_id_token`,
+        but returns the full identity payload extracted from the decoded
+        claims. Used by the federated sign-in endpoint."""
+        try:
+            decoded = auth.verify_id_token(id_token, check_revoked=True)
+        except auth.RevokedIdTokenError:
+            logger.warning("FirebaseAuthAdapter: ID token has been revoked.")
+            raise HTTPException(status_code=401, detail="Session already revoked.")
+        except auth.ExpiredIdTokenError:
+            logger.warning("FirebaseAuthAdapter: ID token expired.")
+            raise HTTPException(status_code=401, detail="Session expired.")
+        except auth.InvalidIdTokenError as e:
+            logger.warning(f"FirebaseAuthAdapter: Invalid ID token. Reason: {e}")
+            raise HTTPException(status_code=401, detail="Invalid authentication token.")
+        except Exception as e:
+            logger.error(f"FirebaseAuthAdapter: Unexpected error verifying ID token: {e}")
+            raise HTTPException(status_code=401, detail="Could not verify authentication token.")
+
+        return FirebaseIdentity(
+            uid=decoded["uid"],
+            email=decoded.get("email"),
+            name=decoded.get("name"),
+            provider_id=(decoded.get("firebase") or {}).get("sign_in_provider"),
+        )
 
     async def verify_id_token(self, id_token: str) -> str:
         try:

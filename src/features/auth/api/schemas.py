@@ -112,6 +112,47 @@ class MePasswordResetResponse(BaseModel):
     message: str = "Password reset instructions have been sent to your inbox."
 
 
+class FederatedSignInRequest(BaseModel):
+    """Body for ``POST /auth/firebase`` — provider-agnostic federated
+    sign-in. The mobile client signs the user in with any provider
+    Firebase Auth supports (Google today, Apple/GitHub later) and
+    forwards the resulting Firebase ID token here.
+    """
+
+    idToken: str
+
+
+class FederatedSignInResponse(BaseModel):
+    token: AuthToken
+    user: RegisteredUser
+    isNewUser: bool = Field(
+        ...,
+        description="True when this sign-in created a brand-new Firestore "
+        "profile (the client should route to a "
+        "complete-profile screen so DNI + phone get filled in).",
+    )
+
+
+class CompleteProfileRequest(BaseModel):
+    """Body for ``POST /auth/me/complete-profile`` — first-time federated
+    users land with empty ``dni`` and ``phone``; this endpoint patches
+    those once. After the first successful call DNI is locked again
+    (the regular ``PATCH /auth/me`` rejects DNI updates by design).
+    """
+
+    dni: str = Field(..., description="Peruvian DNI — exactly 8 digits.")
+    phone: str = Field(..., min_length=1)
+    name: str | None = Field(default=None, min_length=1)
+    lastName: str | None = Field(default=None, min_length=1)
+
+    @field_validator("dni")
+    @classmethod
+    def validate_dni(cls, v: str) -> str:
+        if not re.fullmatch(r"\d{8}", v):
+            raise ValueError("DNI must be exactly 8 digits")
+        return v
+
+
 # Re-export so router.py imports stay tidy.
 __all__ = [
     "RegistrationRequest",
@@ -125,4 +166,7 @@ __all__ = [
     "PasswordResetRequest",
     "PasswordResetResponse",
     "MePasswordResetResponse",
+    "FederatedSignInRequest",
+    "FederatedSignInResponse",
+    "CompleteProfileRequest",
 ]
