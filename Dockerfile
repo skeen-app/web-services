@@ -1,40 +1,20 @@
-# Use the official Python 3.11 slim image
+# Use an official lightweight Python image.
 FROM python:3.11-slim
 
-# Set environment variables for Python
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
-
-# Create a non-root user
-RUN addgroup --system app && adduser --system --group app
+# Allow statements and log messages to immediately appear in the logs
+ENV PYTHONUNBUFFERED True
 
 # Set the working directory
-WORKDIR /app
+ENV APP_HOME /app
+WORKDIR $APP_HOME
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements and install dependencies
-# Note: Assuming requirements.txt will be created. Let's create a placeholder if it doesn't exist.
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy local code to the container image.
+COPY . ./
 
-# Copy the application code
-COPY src/ /app/src/
-
-# Change ownership to the non-root user
-RUN chown -R app:app /app
-
-# Use the non-root user
-USER app
-
-# Expose port (Cloud Run uses 8080 by default)
-EXPOSE 8080
-
-# Run the FastAPI application using Uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Run the web service on container startup.
+# Cloud Run sets the PORT environment variable automatically.
+CMD exec uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1
