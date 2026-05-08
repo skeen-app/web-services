@@ -206,5 +206,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+.claude/
+
 # Credentials Firebase .json
 skeen-app-project-firebase-adminsdk-fbsvc-8a01c2358d.json
