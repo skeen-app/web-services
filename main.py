@@ -1,10 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from src.core.middlewares.jwt import jwt_middleware
 from src.core.rate_limit import limiter
 from google.cloud import firestore, storage
 import firebase_admin
@@ -39,11 +38,16 @@ async def lifespan(app: FastAPI):
     logger.info("Firestore client closed.")
 
 
+_is_dev = os.getenv("ENVIRONMENT", "production") == "development"
+
 app = FastAPI(
     title="Skeen Backend",
     description="Skeen backend orchestrator for dermatological triage data in Peru.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
+    openapi_url="/openapi.json" if _is_dev else None,
 )
 
 # CORS config
@@ -69,9 +73,6 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
         content={"detail": "Too many requests. Please try again later."},
     )
 
-
-# Add custom JWT middleware
-app.middleware("http")(jwt_middleware)
 
 @app.get("/health")
 def health_check():

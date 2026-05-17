@@ -56,6 +56,6 @@ jobs:
             --max-instances=10 \
             --concurrency=80 \
             --timeout=300 \
-            --set-env-vars="FIRESTORE_DATABASE_ID=skeen-prod,GCS_PROFILE_PHOTOS_BUCKET=skeen-profile-photos,GCS_SCAN_IMAGES_BUCKET=skeen-scan-images,GOOGLE_APPLICATION_CREDENTIALS=/secrets/gac.json" \
+            --set-env-vars="ENVIRONMENT=production,FIRESTORE_DATABASE_ID=skeen-prod,GCS_PROFILE_PHOTOS_BUCKET=skeen-profile-photos,GCS_SCAN_IMAGES_BUCKET=skeen-scan-images,GOOGLE_APPLICATION_CREDENTIALS=/secrets/gac.json" \
             --update-secrets="/secrets/gac.json=SKEEN_GAC:latest" \
             --update-secrets="FIREBASE_WEB_API_KEY=FIREBASE_API_KEY_SECRET:latest"
