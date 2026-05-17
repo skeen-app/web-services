@@ -77,6 +77,15 @@ class IStorageRepository(Protocol):
         """Upload profile photo to cloud storage and return the public URL"""
         pass
 
+    async def delete_profile_photo(self, user_id: str) -> bool:
+        """Delete every profile-photo blob owned by the user from cloud
+        storage. Returns ``True`` when at least one blob was removed,
+        ``False`` when none existed (the call is idempotent — re-running
+        it after a successful delete is a safe no-op). Implementations
+        should be best-effort: a network or permission error against a
+        single extension should not abort the sweep of the others."""
+        pass
+
 class IUserRepository(Protocol):
     async def save_user(self, user: UserEntity) -> None:
         """Save user profile data to database"""
@@ -86,8 +95,10 @@ class IUserRepository(Protocol):
         """Retrieve user profile data by ID"""
         pass
 
-    async def update_avatar_url(self, user_id: str, photo_url: str) -> None:
-        """Update only the avatarUrl field in the user document"""
+    async def update_avatar_url(self, user_id: str, photo_url: str | None) -> None:
+        """Update the avatarUrl field on the user document. Pass ``None``
+        to clear the field — the delete-profile-photo flow leans on this
+        to reset the value after wiping the underlying blob."""
         pass
 
     async def update_profile(self, user_id: str, fields: dict) -> None:

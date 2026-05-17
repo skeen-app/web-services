@@ -31,11 +31,18 @@ class FirestoreUserAdapter:
             logger.error(f"FirestoreUserAdapter: Failed to get user {user_id}. Error: {e}", exc_info=True)
             raise
 
-    async def update_avatar_url(self, user_id: str, photo_url: str) -> None:
+    async def update_avatar_url(self, user_id: str, photo_url: str | None) -> None:
+        # Firestore's `update({"avatarUrl": None})` writes a literal null
+        # for the field, which is exactly the semantic we want when the
+        # delete flow runs — the entity already allows `avatarUrl: None`
+        # so this stays a single round-trip instead of needing a sentinel.
         try:
             doc_ref = self.db.collection(self.collection_name).document(user_id)
             doc_ref.update({"avatarUrl": photo_url})
-            logger.info(f"FirestoreUserAdapter: Updated avatarUrl for user {user_id}")
+            logger.info(
+                f"FirestoreUserAdapter: Updated avatarUrl for user {user_id} "
+                f"({'cleared' if photo_url is None else 'set'})"
+            )
         except Exception as e:
             logger.error(f"FirestoreUserAdapter: Failed to update avatarUrl for user {user_id}. Error: {e}", exc_info=True)
             raise

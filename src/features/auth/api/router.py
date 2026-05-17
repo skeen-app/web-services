@@ -6,7 +6,7 @@ from src.features.auth.application.password_reset_service import PasswordResetSe
 from src.features.auth.application.identity_service import build_default_identity_service
 from src.features.auth.api.schemas import (
     RegistrationRequest, LoginRequest, RegisteredUser,
-    AuthToken, LogoutResponse, ProfilePhotoResponse,
+    AuthToken, LogoutResponse, ProfilePhotoResponse, DeleteProfilePhotoResponse,
     UpdateProfileRequest, DeleteAccountResponse,
     PasswordResetRequest, PasswordResetResponse, MePasswordResetResponse,
     FederatedSignInRequest, FederatedSignInResponse, CompleteProfileRequest,
@@ -328,4 +328,65 @@ async def upload_profile_photo(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal sequence failed during profile photo upload.",
+        )
+
+
+@router.delete("/profile-photo", response_model=DeleteProfilePhotoResponse)
+async def delete_profile_photo(
+    authorization: str = Header(..., description="Bearer <Firebase ID Token>"),
+    service: ProfilePhotoService = Depends(get_profile_photo_service),
+):
+    """Remove the authenticated user's profile photo.
+
+    Mirrors the ``DELETE /scans/{id}`` contract:
+      • Auth via Bearer Firebase ID token (no body required — the
+        resource is implicitly the caller's own profile).
+      • Best-effort Cloud Storage cleanup so a transient GCS error
+        doesn't strand a user with a phantom photo on their UI.
+      • Idempotent: a user with no photo gets ``deleted=False``
+        instead of a 404 so the mobile client can call this safely
+        without first checking ``avatarUrl``.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token in Authorization header.",
+        )
+    id_token = authorization.split(" ", 1)[1].strip()
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empty Bearer token.",
+        )
+
+    try:
+        auth_adapter = FirebaseAuthAdapter()
+        uid = await auth_adapter.verify_id_token(id_token)
+        logger.info(f"Profile photo delete requested by user {uid}")
+
+        deleted, deleted_at = await service.delete_profile_photo(user_id=uid)
+
+        if deleted:
+            logger.info(f"Profile photo deleted successfully for user {uid}")
+            return DeleteProfilePhotoResponse(
+                deleted=True,
+                deletedAt=deleted_at,
+                message="Profile photo removed",
+            )
+
+        logger.info(f"Profile photo delete was a no-op for user {uid} (none on file)")
+        return DeleteProfilePhotoResponse(
+            deleted=False,
+            deletedAt=0,
+            message="No profile photo to remove",
+        )
+
+    except HTTPException as handled_exc:
+        logger.warning(f"Profile photo delete aborted: {handled_exc.detail}")
+        raise handled_exc
+    except Exception as e:
+        logger.error(f"Internal error during profile photo delete: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal sequence failed during profile photo delete.",
         )

@@ -1,3 +1,5 @@
+import time
+
 from fastapi import HTTPException, status
 from src.features.auth.domain.entities import IStorageRepository, IUserRepository
 from src.core.logger import get_logger
@@ -45,6 +47,67 @@ class ProfilePhotoService:
         logger.info(f"ProfilePhotoService: Photo URL persisted in database for user {user_id}")
 
         return public_url
+
+    async def delete_profile_photo(self, user_id: str) -> tuple[bool, int]:
+        """Remove the user's profile photo — Cloud Storage blob + the
+        ``avatarUrl`` field on the Firestore profile.
+
+        Returns ``(deleted, deletedAt)``:
+            • ``deleted = True`` when the user had a photo at call time
+              and we successfully cleared the Firestore record. The GCS
+              blob deletion is best-effort: if the network blip leaves
+              a stale blob behind we still consider the operation a
+              success because the source of truth for the UI (the
+              Firestore ``avatarUrl``) was reset.
+            • ``deleted = False`` when the user had no photo to begin
+              with (idempotent — the mobile client can retry safely).
+              ``deletedAt`` is ``0`` in that case so callers can use it
+              as a "no-op marker" without branching on the boolean.
+        """
+        logger.info(f"ProfilePhotoService: Delete requested for user {user_id}")
+
+        user = await self.user_repo.get_user(user_id)
+        if user is None:
+            # The endpoint authenticates the caller via Firebase before
+            # invoking us, so a missing Firestore profile here is an
+            # inconsistency worth flagging — surface as 404 so the
+            # client can recover (re-run profile completion).
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found.",
+            )
+
+        if not user.avatarUrl:
+            logger.info(
+                f"ProfilePhotoService: Nothing to delete for user {user_id} "
+                f"(avatarUrl already empty)"
+            )
+            return False, 0
+
+        # Best-effort GCS sweep — mirrors the delete-scan pattern. A
+        # warning is logged when nothing is found OR when the underlying
+        # client raises a transient error; we still clear Firestore.
+        try:
+            removed_any = await self.storage_repo.delete_profile_photo(user_id)
+            if not removed_any:
+                logger.warning(
+                    f"ProfilePhotoService: avatarUrl was set but no blob "
+                    f"existed in storage for user {user_id} — clearing "
+                    f"Firestore anyway"
+                )
+        except Exception as e:
+            logger.warning(
+                f"ProfilePhotoService: Storage deletion failed for user "
+                f"{user_id}, continuing with Firestore cleanup. Error: {e}"
+            )
+
+        await self.user_repo.update_avatar_url(user_id, None)
+        deleted_at = int(time.time())
+        logger.info(
+            f"ProfilePhotoService: Profile photo cleared for user {user_id} "
+            f"at {deleted_at}"
+        )
+        return True, deleted_at
 
     # ──────────────────────────── validators ────────────────────────────
 

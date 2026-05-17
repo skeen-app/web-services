@@ -1,5 +1,6 @@
 import os
 from google.cloud import storage
+from google.cloud.exceptions import NotFound
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -10,6 +11,12 @@ _MIME_TO_EXT = {
     "image/png": "png",
     "image/webp": "webp",
 }
+
+# Every extension the upload pipeline could have produced. The delete
+# sweep walks all of them because the bucket holds at most one of these
+# per user (re-uploads with a different MIME would have left stale blobs
+# under the previous extension, so we tidy those up too).
+_KNOWN_EXTS: tuple[str, ...] = tuple(_MIME_TO_EXT.values())
 
 
 class CloudStorageAdapter:
@@ -40,3 +47,35 @@ class CloudStorageAdapter:
         except Exception as e:
             logger.error(f"CloudStorageAdapter: Failed to upload photo for user {user_id}. Error: {e}", exc_info=True)
             raise
+
+    async def delete_profile_photo(self, user_id: str) -> bool:
+        """Sweep every profile-photo blob owned by this user.
+
+        Returns ``True`` when at least one blob was actually deleted,
+        ``False`` when nothing was found (idempotent — re-running after a
+        successful delete is a safe no-op). Individual failures are
+        logged as warnings and never raised; the caller (the service
+        layer) decides what to do with a partial sweep — for our current
+        flow we still clear Firestore so the UI matches the user's
+        intent.
+        """
+        bucket = self.client.bucket(self.bucket_name)
+        deleted_any = False
+        for ext in _KNOWN_EXTS:
+            blob_path = f"profiles/{user_id}.{ext}"
+            blob = bucket.blob(blob_path)
+            try:
+                blob.delete()
+                deleted_any = True
+                logger.info(
+                    f"CloudStorageAdapter: Deleted profile photo blob {blob_path}"
+                )
+            except NotFound:
+                # Expected for every extension the user never uploaded.
+                continue
+            except Exception as e:
+                logger.warning(
+                    f"CloudStorageAdapter: Best-effort delete failed for {blob_path}. "
+                    f"Continuing with the remaining extensions. Error: {e}"
+                )
+        return deleted_any

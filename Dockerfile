@@ -1,20 +1,28 @@
-# Use an official lightweight Python image.
 FROM python:3.11-slim
 
-# Allow statements and log messages to immediately appear in the logs
+# Evita que Python genere archivos .pyc y asegura salida de logs limpia
+ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED True
 
-# Set the working directory
-ENV APP_HOME /app
-WORKDIR $APP_HOME
+# Seteamos el PATH de Python a la raíz de la app
+ENV PYTHONPATH=/app
 
-# Install dependencies
+WORKDIR /app
+
+# Primero instalamos dependencias para optimizar caché
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy local code to the container image.
-COPY . ./
+# Copiamos todo el proyecto
+COPY . .
 
-# Run the web service on container startup.
-# Cloud Run sets the PORT environment variable automatically.
-CMD exec uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 1
+# --- EL TRUCO MAESTRO ---
+# Creamos archivos __init__.py en src y todas sus subcarpetas 
+# para forzar a Python a reconocerlos como paquetes.
+RUN find src -type d -exec touch {}/__init__.py \;
+
+# Exponemos el puerto de Cloud Run
+EXPOSE 8080
+
+# Ejecutamos uvicorn como módulo para que resuelva mejor los paths internos
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]

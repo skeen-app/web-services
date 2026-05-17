@@ -72,6 +72,26 @@ class ProfilePhotoResponse(BaseModel):
     uploadedAt: int
 
 
+class DeleteProfilePhotoResponse(BaseModel):
+    """Response for ``DELETE /auth/profile-photo``.
+
+    ``deleted`` is ``True`` when the call actually cleared a photo
+    (Cloud Storage blob attempted + Firestore ``avatarUrl`` reset to
+    ``None``). It returns ``False`` when the user had no photo to start
+    with — the endpoint is idempotent so the mobile client can retry
+    or call it on first-load without special-casing the "nothing to
+    delete" scenario.
+
+    ``deletedAt`` is a unix timestamp populated only when a real delete
+    happened; the idempotent no-op path returns ``0`` so callers can
+    pivot on a single integer instead of two booleans.
+    """
+
+    deleted: bool
+    deletedAt: int = 0
+    message: str = "Profile photo removed"
+
+
 class PasswordResetRequest(BaseModel):
     """Payload for ``POST /auth/password-reset/request`` (public).
 
@@ -161,6 +181,7 @@ __all__ = [
     "AuthToken",
     "LogoutResponse",
     "ProfilePhotoResponse",
+    "DeleteProfilePhotoResponse",
     "UpdateProfileRequest",
     "DeleteAccountResponse",
     "PasswordResetRequest",
