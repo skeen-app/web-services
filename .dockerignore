@@ -1,0 +1,25 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environment
+venv/
+.venv/
+
+# Sensitive files — credentials never go into the image
+.env
+.env.*
+*.json
+
+# Git & CI metadata
+.git/
+.github/
+.gitignore
+
+# Dev-only tooling
+.agents/
+docs/
+skeen_brief_be.py
