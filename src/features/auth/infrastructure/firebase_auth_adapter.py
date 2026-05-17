@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 class FirebaseAuthAdapter:
     def __init__(self):
         # FIREBASE_WEB_API_KEY must be set in the environment or GCP Secret Manager
-        self.web_api_key = os.getenv("FIREBASE_WEB_API_KEY")
+        self.web_api_key = (os.getenv("FIREBASE_WEB_API_KEY") or "").strip()
 
     async def create_user(self, email: str, password: str) -> str:
         try:
