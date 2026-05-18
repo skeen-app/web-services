@@ -28,7 +28,7 @@ class FirebaseAuthAdapter:
         if not self.web_api_key:
             logger.error("FirebaseAuthAdapter: FIREBASE_WEB_API_KEY is not configured.")
             raise HTTPException(status_code=500, detail="Internal configuration error.")
-        logger.info(f"FirebaseAuthAdapter: using API key prefix={self.web_api_key[:8]!r} len={len(self.web_api_key)}")
+
 
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.web_api_key}"
         payload = {
