@@ -57,7 +57,14 @@ class FirebaseAuthAdapter:
         but returns the full identity payload extracted from the decoded
         claims. Used by the federated sign-in endpoint."""
         try:
-            decoded = auth.verify_id_token(id_token, check_revoked=True)
+            # clock_skew_seconds tolerates small clock differences between
+            # the client device and this server. Without it a token whose
+            # `iat`/`nbf` is a few seconds ahead of server time is rejected
+            # as "Token used too early" — the exact failure that blocked
+            # Google sign-in on devices with a slightly fast clock.
+            decoded = auth.verify_id_token(
+                id_token, check_revoked=True, clock_skew_seconds=10
+            )
         except auth.RevokedIdTokenError:
             logger.warning("FirebaseAuthAdapter: ID token has been revoked.")
             raise HTTPException(status_code=401, detail="Session already revoked.")
@@ -80,7 +87,11 @@ class FirebaseAuthAdapter:
 
     async def verify_id_token(self, id_token: str) -> str:
         try:
-            decoded = auth.verify_id_token(id_token, check_revoked=True)
+            # See resolve_identity: tolerate minor client/server clock skew
+            # so a slightly-fast device clock doesn't 401 every request.
+            decoded = auth.verify_id_token(
+                id_token, check_revoked=True, clock_skew_seconds=10
+            )
             return decoded["uid"]
         except auth.RevokedIdTokenError:
             logger.warning("FirebaseAuthAdapter: ID token has been revoked.")
