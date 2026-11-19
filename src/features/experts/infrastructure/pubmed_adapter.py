@@ -349,4 +349,28 @@ class PubmedAdapter:
         # Sanitise: strip PubMed field tags from user input so a
         # malicious-looking string can't escape the bracketed clause.
         cleaned = re.sub(r"[\[\]\"]", "", cleaned)
+        if not cleaned.strip():
+            return template
+        # H06 (QA cycle 1): partial words ("mela") returned nothing because
+        # PubMed only matches whole terms. OR the literal query (keeps
+        # PubMed's automatic MeSH mapping for full words) with a prefix
+        # variant using PubMed truncation (``term*``). PubMed requires at
+        # least 4 characters before the wildcard, so shorter tokens and
+        # boolean operators are passed through unchanged.
+        prefix_clause = PubmedAdapter._prefix_clause(cleaned)
+        if prefix_clause and prefix_clause != cleaned:
+            return f"(({cleaned}) OR ({prefix_clause})) AND {template}"
         return f"({cleaned}) AND {template}"
+
+    @staticmethod
+    def _prefix_clause(cleaned: str) -> str:
+        parts = []
+        for token in cleaned.split():
+            if token.upper() in {"AND", "OR", "NOT"}:
+                continue
+            stem = token.rstrip("*")
+            if len(stem) >= 4 and re.fullmatch(r"[\w\-]+", stem):
+                parts.append(f"{stem}*")
+            elif stem:
+                parts.append(stem)
+        return " AND ".join(parts)
